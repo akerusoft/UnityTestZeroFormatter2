@@ -14,8 +14,12 @@ namespace Test2
         const int COUNT = 1000;
         const string ZERO_FORMATTER_FILE_NAME = "ZeroFormatter.bin";
         const string FLAT_BUFFERS_FILE_NAME = "FlatBuffers.bin";
+        const string JSON_UTILITY_FILE_NAME = "JsonUtility.bin";
 
         const string MONSTER_NAME = "スライム";
+
+        [SerializeField]
+        Text _textIterationCount;
 
         [SerializeField]
         Text _textFlatBuffers;
@@ -23,17 +27,28 @@ namespace Test2
         [SerializeField]
         Text _textZeroFormatter;
 
+        [SerializeField]
+        Text _textJsonUtility;
+
         long _flatbuffresElapsedTime;
         long _zeroFormatterElapsedTime;
+        long _jsonUtilityElapsedTime;
 
         IEnumerator Start()
         {
             try
             {
-                File.Delete(Path.Combine(Application.persistentDataPath, ZERO_FORMATTER_FILE_NAME));
-                File.Delete(Path.Combine(Application.persistentDataPath, FLAT_BUFFERS_FILE_NAME));
+                System.Action<string> DeleteFile = (string path) =>
+                {
+                    if (File.Exists(path))
+                        File.Delete(path);
+                };
+
+                DeleteFile(Path.Combine(Application.persistentDataPath, ZERO_FORMATTER_FILE_NAME));
+                DeleteFile(Path.Combine(Application.persistentDataPath, FLAT_BUFFERS_FILE_NAME));
+                DeleteFile(Path.Combine(Application.persistentDataPath, JSON_UTILITY_FILE_NAME));
             }
-            catch(System.Exception ex)
+            catch (System.Exception ex)
             {
                 UnityEngine.Debug.LogException(ex);
             }
@@ -50,8 +65,16 @@ namespace Test2
 
             TestFlatBuffers();
 
+            System.GC.Collect();
+            Resources.UnloadUnusedAssets();
+            yield return null;
+
+            TestJsonUtility();
+
+            _textIterationCount.text = string.Format("Iteration:{0}", COUNT);
             _textFlatBuffers.text = string.Format("FlatBuffers:{0}[ms]", _flatbuffresElapsedTime);
             _textZeroFormatter.text = string.Format("ZeroFormatter:{0}[ms]", _zeroFormatterElapsedTime);
+            _textJsonUtility.text = string.Format("JsonUtility:{0}[ms]", _jsonUtilityElapsedTime);
         }
 
         void TestFlatBuffers()
@@ -66,9 +89,6 @@ namespace Test2
 
             string path = Path.Combine(Application.persistentDataPath, FLAT_BUFFERS_FILE_NAME);
             //UnityEngine.Debug.Log("path:" + path);
-
-            if (File.Exists(path))
-                File.Delete(path);
 
             stopWatch.Start();
 
@@ -154,9 +174,6 @@ namespace Test2
             string path = Path.Combine(Application.persistentDataPath, ZERO_FORMATTER_FILE_NAME);
             //UnityEngine.Debug.Log("path:" + path);
 
-            if (File.Exists(path))
-                File.Delete(path);
-
             stopWatch.Start();
 
             for (int i = 0; i < COUNT; ++i)
@@ -198,7 +215,7 @@ namespace Test2
                         Luck = luck,
                     };
 
-                    UnityEngine.Debug.Log("[ZeroFormatter] data:" + data);
+                    //UnityEngine.Debug.Log("[ZeroFormatter] data:" + data);
                     File.WriteAllBytes(path, ZeroFormatterSerializer.Serialize<MonsterDataBase>(data));
                 }
 
@@ -209,6 +226,69 @@ namespace Test2
 
             stopWatch.Stop();
             _zeroFormatterElapsedTime = stopWatch.ElapsedMilliseconds;
+        }
+
+        void TestJsonUtility()
+        {
+            Stopwatch stopWatch = new Stopwatch();
+
+            string name = null;
+            uint hitPoint = 0;
+            float hitRate = 0f;
+            uint speed = 0;
+            uint luck = 0;
+
+            string path = Path.Combine(Application.persistentDataPath, JSON_UTILITY_FILE_NAME);
+            //UnityEngine.Debug.Log("path:" + path);
+
+            stopWatch.Start();
+
+            for (int i = 0; i < COUNT; ++i)
+            {
+                // 読み込み
+                if (File.Exists(path))
+                {
+                    JsonData data = JsonUtility.FromJson<JsonData>(File.ReadAllText(path, System.Text.Encoding.UTF8));
+
+                    switch(data.Version)
+                    {
+                        case JsonData.VERSION1:
+                            name = data.Name;
+                            hitPoint = data.HitPoint;
+                            hitRate = data.HitRate;
+                            speed = data.Speed;
+                            luck = data.Luck;
+                            break;
+                    }
+                }
+
+                hitPoint++;
+                hitRate += 1f;
+                speed++;
+                luck++;
+
+                // 書き込み
+                {
+                    JsonData data = new JsonData()
+                    {
+                        Name = MONSTER_NAME,
+                        HitPoint = hitPoint,
+                        HitRate = hitRate,
+                        Speed = speed,
+                        Luck = luck,
+                    };
+
+                    //UnityEngine.Debug.Log("[JsonUtility] data:" + data);
+                    File.WriteAllText(path, JsonUtility.ToJson(data), System.Text.Encoding.UTF8);
+                }
+
+                //UnityEngine.Debug.Log("[JsonUtility] hitPoint:" + hitPoint);
+
+                hitPoint = 0;
+            }
+
+            stopWatch.Stop();
+            _jsonUtilityElapsedTime = stopWatch.ElapsedMilliseconds;
         }
     }
 }
